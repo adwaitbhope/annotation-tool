@@ -4,7 +4,8 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from backend.models import Image, Project, Category
 import json
-import cv2
+# import cv2
+from PIL import Image
 import os
 import random
 import xml.dom.minidom
@@ -92,13 +93,13 @@ def submit_annotations(request, project):
 
     image_name = os.path.join('images', get_next_image(project))
     image_path = os.path.abspath(os.path.join(project_dir_abs, image_name))
-    image = cv2.imread(image_path)
+    image = Image.open(image_path)
 
     context = {
         'image_src': os.path.join(project_dir, image_name),
-        'image_width': image.shape[1],
-        'image_height': image.shape[0],
-        'image_depth': image.shape[2]
+        'image_width': image.size[0],
+        'image_height': image.size[1],
+        'image_depth': 3
     }
 
     return JsonResponse(context, safe=False)
@@ -114,7 +115,7 @@ def annotate(request, project):
 
     image_name = os.path.join('images', get_next_image(project))
     image_path = os.path.abspath(os.path.join(project_dir_abs, image_name))
-    image = cv2.imread(image_path)
+    image = Image.open(image_path)
 
     categories = Category.objects.filter(project=project_entry)
     categories = json.dumps([category.name for category in categories])
@@ -123,9 +124,9 @@ def annotate(request, project):
         'project': project,
         'project_title': project.upper(),
         'image_src': os.path.join(project_dir, image_name),
-        'image_width': image.shape[1],
-        'image_height': image.shape[0],
-        'image_depth': image.shape[2],
+        'image_width': image.size[0],
+        'image_height': image.size[1],
+        'image_depth': 3,
         'categories': categories
     }
 
