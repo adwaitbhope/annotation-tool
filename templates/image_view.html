@@ -1,0 +1,287 @@
+<html>
+
+<head>
+    <title>Annotation Tool</title>
+    <style>
+        #canvas, #undo_button, #save_and_next_button {
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        #label_container {
+            text-align: center
+        }
+        .label_button {
+            margin-left: 8px;
+        }
+    </style>
+
+    <script>
+        function ev_labelclick(ev) {
+            var pressed_button = ev.target;
+            cur_label = pressed_button.innerHTML;
+
+            toggleButtons("disabled");
+            pressed_button.disabled = false;
+
+            can_start = true;
+        }
+
+        function addLabelToUI(label){
+            var button = document.createElement("button");
+            button.classList.add("label_button");
+            button.innerHTML = label;
+            button.addEventListener('click', ev_labelclick, false);
+
+            var parent = document.getElementById("label_container");
+            parent.appendChild(button);
+        }
+
+        function drawGuideLines() {
+            // draw vertical and horizontal lines for convenience
+            ctx.lineWidth = Math.ceil(scaling_factor);
+
+            ctx.beginPath();
+            ctx.moveTo(cur_x, 0);
+            ctx.lineTo(cur_x, canvas.height);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, cur_y);
+            ctx.lineTo(canvas.width, cur_y);
+            ctx.stroke();
+        }
+
+        function convertAndClipToCanvas(ev) {
+            // makes coordinates relative to the canvas area
+            // and clips it to the canvas boundary
+            var x = Math.floor(ev.pageX);
+            var y = Math.floor(ev.pageY);
+
+            x = Math.min(Math.max(0, x - canvas_x1), canvas_x2 - canvas_x1);
+            y = Math.min(Math.max(0, y - canvas_y1), canvas_y2 - canvas_y1);
+
+            return [Math.floor(x * scaling_factor), Math.floor(y * scaling_factor)];
+        }
+
+        function undo() {
+            if (can_start) {
+                toggleButtons("enable");
+                can_start = false;
+            } else {
+                boxes.pop();
+                labels.pop();
+                redraw();
+            }
+        }
+
+        function setupCanvas() {
+            // set up canvas while loading an image for the first time
+            image_element.src = current_image_name;
+            canvas.width = current_image_width;
+            canvas.height = current_image_height;
+            var image_aspect_ratio = current_image_width / current_image_height;
+
+            // get size of the window
+            var window_width = window.innerWidth;
+            var window_height = window.innerHeight;
+            var window_aspect_ratio = window_width / window_height;
+
+            var CANVAS_WINDOW_RATIO = 0.75;
+
+            // resize the image to fit it on the same screen
+            if (image_aspect_ratio > window_aspect_ratio) {
+                // means image is wider than required
+                canvas.style.width = window_width * CANVAS_WINDOW_RATIO;      // clip the width
+                canvas.style.height = (window_width * CANVAS_WINDOW_RATIO) / image_aspect_ratio;      // resize the height
+            } else {
+                // image is taller than required
+                canvas.style.height = window_height * CANVAS_WINDOW_RATIO;    // clip the height
+                canvas.style.width = (window_height * CANVAS_WINDOW_RATIO) * image_aspect_ratio;      // resize the width
+            }
+
+            scaling_factor = canvas.width / parseInt(canvas.style.width, 10);
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            setCanvasCoordinates();
+        }
+
+        function redraw() {
+            // redraws the image and all bounding boxes annotated so far
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0);
+
+            ctx.fillStyle = "#FF000044";
+            for (var i = 0; i < boxes.length; i++) {
+                var box = boxes[i];
+                ctx.fillRect(box["xmin"], box["ymin"], box["xmax"] - box["xmin"], box["ymax"] - box["ymin"]);
+            }
+        }
+
+        function getCurrentBoundingBox() {
+            box = {
+                "xmin": Math.min(box_x1, box_x2),
+                "ymin": Math.min(box_y1, box_y2),
+                "xmax": Math.max(box_x1, box_x2),
+                "ymax": Math.max(box_y1, box_y2)
+            }
+            return box;
+        }
+
+        function toggleButtons(state) {
+            var disabled = (state == "disabled");
+            var buttons = document.getElementsByClassName("label_button");
+            for (var i = 0; i < buttons.length; i++) {
+                buttons[i].disabled = disabled;
+            }
+        }
+
+        function saveAndNext() {
+            var data = {
+                "image": {
+                    "path": current_image_name,
+                    "width": current_image_width,
+                    "height": current_image_height,
+                    "depth": current_image_depth
+                },
+                "labels": labels,
+                "boxes": boxes
+            }
+
+            submit_data(JSON.stringify(data));
+        }
+
+        function submit_data(data) {
+            const xhr = new XMLHttpRequest();
+            const url = 'http://127.0.0.1:8000/submit/' + project;
+            xhr.open("POST", url);
+            xhr.setRequestHeader("Content-Type", "application/json");
+            xhr.send(data);
+
+            xhr.onreadystatechange = (e) => {
+                var image_details = JSON.parse(xhr.responseText);
+                current_image_name = image_details['image_src'];
+                current_image_width = image_details['image_width'];
+                current_image_height = image_details['image_height'];
+                current_image_depth = image_details['image_depth'];
+                boxes = [];
+                labels = [];
+                setupCanvas();
+            }
+        }
+
+        function setCanvasCoordinates() {
+            var rect = canvas.getBoundingClientRect();
+            canvas_x1 = Math.floor(rect.left);
+            canvas_y1 = Math.floor(rect.top);
+            canvas_x2 = Math.floor(rect.right);
+            canvas_y2 = Math.floor(rect.bottom);
+        }
+
+    </script>
+
+</head>
+
+<body onresize="setupCanvas()">
+    <div id="page">
+        <h1 align="center">{{ project_title }} Annotation Tool</h3>
+
+        <img id="img" src="{{ image_src }}" align=center>
+
+        <canvas id="canvas" width="{{ image_width }}" height="{{ image_height }}" style="border:0px solid #000000;"></canvas><br>
+
+        <div id="label_container"></div><br>
+
+        <button id="undo_button" onClick="undo()">Undo</button><br>
+        <button id="save_and_next_button" onClick="saveAndNext()">Save and Next</button>
+    </div>
+
+    <script>
+
+        var project = "{{ project }}";
+
+        // total categories
+        var predefined_categories = {{ categories|safe }};
+        for (var i = 0; i < predefined_categories.length; i++) {
+            addLabelToUI(predefined_categories[i]);
+        }
+
+        // list of all annotated bounding boxes and labels
+        var boxes = [];
+        var labels = [];
+
+        var image_element = document.getElementById("img");
+        image_element.style.display = "none";
+        var current_image_name = "{{ image_src }}";
+        var current_image_width = {{ image_width }};
+        var current_image_height = {{ image_height }};
+        var current_image_depth = {{ image_depth }};
+
+        var canvas = document.getElementById("canvas");
+        var ctx = canvas.getContext("2d");
+
+        var canvas_x1, canvas_x2, canvas_y1, canvas_y2;
+        var scaling_factor;
+
+        setupCanvas();
+
+        var can_start = false;  // can start if category label is clicked
+        var started = false;    // started when first click is performed
+
+        // coordinates of the current bounding that is being drawn
+        var box_x1, box_y1;
+        var box_x2, box_y2;
+        var cur_x, cur_y;
+        var cur_label;
+
+        function ev_mouseclick(ev) {
+            if (started) {
+                // if annotation has started, end it and store coordinates
+                box_x2 = cur_x;
+                box_y2 = cur_y;
+
+                started = false;
+                can_start = false;
+                toggleButtons("enable");
+
+                labels.push(cur_label);
+                boxes.push(getCurrentBoundingBox());
+            } else if (can_start && ev.target == canvas) {
+                // start annotation if label is selected and
+                // point is inside canvas
+                box_x1 = cur_x;
+                box_y1 = cur_y;
+                started = true;
+            }
+        }
+
+        function ev_mousemove(ev) {
+            coordinates = convertAndClipToCanvas(ev);
+            cur_x = coordinates[0];
+            cur_y = coordinates[1];
+
+            // document.getElementById("demo").innerHTML = "Width: " + w + "<br>Height: " + h;
+            // console.log(w, h);
+
+            redraw();
+
+            if (started) {
+                // draw bounding box if annotation has started
+                ctx.fillRect(box_x1, box_y1, cur_x - box_x1, cur_y - box_y1);
+            } else if (can_start && ev.target == canvas) {
+                // draw guidelines if point is inside canvas
+                drawGuideLines();
+            }
+
+        }
+
+        document.addEventListener('mousemove', ev_mousemove, false);
+        document.addEventListener('click', ev_mouseclick, false);
+
+    </script>
+
+</body>
+
+</html>
