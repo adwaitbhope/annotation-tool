@@ -122,6 +122,7 @@ def annotate(request, project):
     context = {
         'project': project,
         'project_title': project.upper(),
+        'submit_url': settings.HOSTED_URL + 'submit/' + project + '/',
         'image_src': os.path.join(project_dir, image_name),
         'image_width': image.size[0],
         'image_height': image.size[1],
