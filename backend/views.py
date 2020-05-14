@@ -67,6 +67,11 @@ def get_next_image(project):
     # TODO: optimize following query (merge into one)
     project = Project.objects.get(name=project)
     images = Image.objects.filter(project=project, annotated=False)
+
+    if len(images) == 0:
+        # TODO: render a standard page with error description
+        raise Exception("No images left for annotation.")
+
     image = random.choice(images)
     return image.name
 
@@ -77,6 +82,17 @@ def mark_annotated(project, image_name):
     image = Image.objects.get(project=project, name=image_name)
     image.annotated = True
     image.save()
+
+
+def get_categories(project):
+    categories = Category.objects.filter(project=project)
+
+    if len(categories) == 0:
+        # TODO: render a standard page with error description
+        raise Exception("No categories set for this project.")
+
+    categories = json.dumps([category.name for category in categories])
+    return categories
 
 
 @csrf_exempt
@@ -116,13 +132,12 @@ def annotate(request, project):
     image_path = os.path.abspath(os.path.join(project_dir_abs, image_name))
     image = Img.open(image_path)
 
-    categories = Category.objects.filter(project=project_entry)
-    categories = json.dumps([category.name for category in categories])
+    categories = get_categories(project_entry)
 
     context = {
         'project': project,
         'project_title': project.upper(),
-        'submit_url': settings.HOSTED_URL + 'submit/' + project + '/',
+        'submit_url': settings.HOSTED_URL + 'submit/' + project,
         'image_src': os.path.join(project_dir, image_name),
         'image_width': image.size[0],
         'image_height': image.size[1],
