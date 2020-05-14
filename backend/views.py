@@ -4,8 +4,7 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from backend.models import Image, Project, Category
 import json
-# import cv2
-from PIL import Image
+from PIL import Image as Img
 import os
 import random
 import xml.dom.minidom
@@ -93,7 +92,7 @@ def submit_annotations(request, project):
 
     image_name = os.path.join('images', get_next_image(project))
     image_path = os.path.abspath(os.path.join(project_dir_abs, image_name))
-    image = Image.open(image_path)
+    image = Img.open(image_path)
 
     context = {
         'image_src': os.path.join(project_dir, image_name),
@@ -115,7 +114,7 @@ def annotate(request, project):
 
     image_name = os.path.join('images', get_next_image(project))
     image_path = os.path.abspath(os.path.join(project_dir_abs, image_name))
-    image = Image.open(image_path)
+    image = Img.open(image_path)
 
     categories = Category.objects.filter(project=project_entry)
     categories = json.dumps([category.name for category in categories])
